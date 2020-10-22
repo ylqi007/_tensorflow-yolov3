@@ -9,7 +9,10 @@ _tensorflow-yolov3/
 ```
 
 ## TODO
-1. Prepare dataset and use absolute directories.
+- [x] Prepare dataset and use absolute directories.
+- [x] Prepare `voc_train.txt` and `voc_test.txt` with my own image path.
+- [ ] 
+
 
 
 ## dataset.py
@@ -25,3 +28,8 @@ __C.TRAIN.ANNOT_PATH = "./data/dataset/voc_train.txt"
 image path，所以接下来需要生成我本机的 `voc_train.txt` and `voc_test.txt` 文件。
 
 
+
+
+
+## GitHub Setup
+![](.images/GitHub_Quick_Setup.png)
