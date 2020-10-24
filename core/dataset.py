@@ -76,7 +76,6 @@ class Dataset(object):
                     annotation = self.annotations[index]
                     image, bboxes = self.parse_annotation(annotation)
 
-
     def __len__(self):
         return self.num_batches
 
@@ -96,7 +95,25 @@ class Dataset(object):
 
     def random_crop(self, image, bboxes):
         # TODO
-        pass
+        if random.random() < 0.5:
+            h, w, _ = image.shape
+            max_bbox = np.concatenate([np.min(bboxes[:, 0:2], axis=0), np.max(bboxes[:, 2:4], axis=0)], axis=-1)
+            # max_bbox = [xmin, ymin, xmax, ymax], xmin is the minimum value of all xmins
+            max_l_trans = max_bbox[0]   # the max value can transfer left
+            max_u_trans = max_bbox[1]
+            max_r_trans = w - max_bbox[2]
+            max_d_trans = h - max_bbox[3]
+
+            # cropped [xmin, ymin, xmax, ymax] = [crop_xmin, crop_ymin, crop_xmax, crop_ymax]
+            crop_xmin = max(0, int(max_bbox[0] - random.uniform(0, max_l_trans)))
+            crop_ymin = max(0, int(max_bbox[1] - random.uniform(0, max_u_trans)))
+            crop_xmax = max(0, int(max_bbox[2] + random.uniform(0, max_r_trans)))
+            crop_ymax = max(0, int(max_bbox[3] + random.uniform(0, max_d_trans)))
+
+            image = image[crop_ymin : crop_ymax, crop_xmin : crop_xmax]     # row/col, i.e. y/x
+            bboxes[:, [0, 2]] = bboxes[:, [0, 2]] - crop_xmin
+            bboxes[:, [1, 3]] = bboxes[:, [1, 3]] - crop_ymin
+        return image, bboxes
 
     def random_translate(self, image, bboxes):
         # TODO
@@ -113,7 +130,7 @@ class Dataset(object):
 
         if self.data_aug:
             image, bboxes = self.random_horizontal_flip(np.copy(image), np.copy(bboxes))
-        #     image, bboxes = self.random_crop(np.copy(image), np.copy(bboxes))
+            image, bboxes = self.random_crop(np.copy(image), np.copy(bboxes))
         #     image, bboxes = self.random_translate(np.copy(image), np.copy(bboxes))
         #
         # image, bboxes = utils.image_preprocess(np.copy(image), [self.train_input_size, self.train_input_size], np.copy(bboxes))

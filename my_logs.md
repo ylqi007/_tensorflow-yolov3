@@ -12,12 +12,10 @@ _tensorflow-yolov3/
 - [x] Prepare dataset and use absolute directories.
 - [x] Prepare `voc_train.txt` and `voc_test.txt` with my own image path.
 - [x] Parse annot and draw bounding boxes on original image.
-    - [ ] Cannot draw bounding boxes on flipped image. Why?
+    - [x] Cannot draw bounding boxes on flipped image. Why?
+    - [x] [Python OpenCV drawing errors after manipulating array with numpy](https://stackoverflow.com/questions/30249053/python-opencv-drawing-errors-after-manipulating-array-with-numpy)
 - [ ]
 
-
-![](.images/original_with_bbox.png)
-![](.images/flipped_img_with_bbox.png)
 
 ## dataset.py
 在用 `python main.py` 进行测试的时候，要注意 `core/config.py` 中 `__C.TRAIN.ANNOT_PATH = "./data/dataset/voc_train.txt"`
@@ -32,7 +30,7 @@ __C.TRAIN.ANNOT_PATH = "./data/dataset/voc_train.txt"
 image path，所以接下来需要生成我本机的 `voc_train.txt` and `voc_test.txt` 文件。
 
 ### Snippet Analyze
-[dataset.parse_annotation()](https://github.com/YunYang1994/tensorflow-yolov3/blob/add5920130cd8fd9474da6e4d8dd33b24a56524f/core/dataset.py#L154)
+#### [dataset.parse_annotation()](https://github.com/YunYang1994/tensorflow-yolov3/blob/add5920130cd8fd9474da6e4d8dd33b24a56524f/core/dataset.py#L154)
 ```python
 bboxes = np.array([list(map(lambda x: int(float(x)), box.split(','))) for box in line[1:]])
 ```
@@ -50,6 +48,25 @@ box.split(',')          # ['185', '62', '279', '199', '14'], a list of string
 res = list(map(lambda x: float(x), box.split(',')))     # [185.0, 62.0, 279.0, 199.0, 14.0], a list of float
 res = list(map(lambda x: int(x), list(map(lambda x: float(x), box.split(',')))))    # [185, 62, 279, 199, 14], a list of int
 ```
+
+#### [random_crop()](            max_bbox = np.concatenate([np.min(bboxes[:, 0:2], axis=0), np.max(bboxes[:, 2:4], axis=0)], axis=-1))
+```python
+max_bbox = np.concatenate([np.min(bboxes[:, 0:2], axis=0), np.max(bboxes[:, 2:4], axis=0)], axis=-1)
+```
+* `bboxes[:, 0:2]` represents all rows of column 0 and 1;
+* `bboxes[:, [0, 2]]` represents all rows of column 0 and 2, without column 1;
+* `np.min(bboxes[:, 0:2], axis=0)` represents the min value of `xmin` and min value of `ymin`;
+* `np.max(bboxes[:, 2:4], axis=0)` represents the max value of `xmax` and max value of `ymax`;
+- [ ] Question here
+* `np.concatenate([min_coord, max_coord], axis=-1)`, concatenates the last dim???
+
+![](.images/original_with_bbox.png)
+![](.images/flipped_img_with_bbox.png)
+* Random Flipped Image
+
+![](.images/original_cropped.png) 
+![](.images/flipped_cropped.png)
+* Randrom Cropped Image
 
 ### cv2 coordinates
 ![OpenCV Point(x,y) represent (column,row) or (row,column)](https://stackoverflow.com/questions/25642532/opencv-pointx-y-represent-column-row-or-row-column)
