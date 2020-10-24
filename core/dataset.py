@@ -147,8 +147,11 @@ class Dataset(object):
             image, bboxes = self.random_horizontal_flip(np.copy(image), np.copy(bboxes))
             image, bboxes = self.random_crop(np.copy(image), np.copy(bboxes))
             image, bboxes = self.random_translate(np.copy(image), np.copy(bboxes))
-        #
+        # print("image type and shape: ", type(image), image.shape, np.min(image), np.max(image))
+        # cv2.imshow("Only Blue", image[:, :, 2])
         # image, bboxes = utils.image_preprocess(np.copy(image), [self.train_input_size, self.train_input_size], np.copy(bboxes))
+        image, bboxes = utils.image_preprocess(np.copy(image), [self.train_input_sizes[-1], self.train_input_sizes[-1]],
+                                               np.copy(bboxes))
         return image, bboxes
 
     def bbox_iou(self, boxes1, boxes2):

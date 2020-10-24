@@ -90,6 +90,13 @@ image = cv2.warpAffine(image, M, (w, h))
 ![](.images/flipped_translate.png)        
 * Random translate
 
+#### [image_preporcess](https://github.com/YunYang1994/tensorflow-yolov3/blob/add5920130cd8fd9474da6e4d8dd33b24a56524f/core/utils.py#L38)
+![](.images/original_uitls.png)
+![](.images/flipped_utils.png)
+* `cv2.imread()` 返回的是 BGR format 的 ndarray，如果用`cv2` 显示的时候，显示正常，没有问题。此时用 `plt.show()` 则会显示不正常。
+* `image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32)`, 此时经过 format，image 是 RGB format 的image，则此时用 `cv2.imshow()` 会不正常，而 `plt.show()` 正常。
+
+
 ### cv2
 #### cv2 coordinates
 [OpenCV Point(x,y) represent (column,row) or (row,column)](https://stackoverflow.com/questions/25642532/opencv-pointx-y-represent-column-row-or-row-column)
