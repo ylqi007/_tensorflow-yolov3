@@ -49,7 +49,12 @@ res = list(map(lambda x: float(x), box.split(',')))     # [185.0, 62.0, 279.0, 1
 res = list(map(lambda x: int(x), list(map(lambda x: float(x), box.split(',')))))    # [185, 62, 279, 199, 14], a list of int
 ```
 
-#### [random_crop()](            max_bbox = np.concatenate([np.min(bboxes[:, 0:2], axis=0), np.max(bboxes[:, 2:4], axis=0)], axis=-1))
+#### [random_horizontal_flip()](https://github.com/YunYang1994/tensorflow-yolov3/blob/add5920130cd8fd9474da6e4d8dd33b24a56524f/core/dataset.py#L100)
+![](.images/original_with_bbox.png)
+![](.images/flipped_img_with_bbox.png)
+* Random Flipped Image
+
+#### [random_crop()](https://github.com/YunYang1994/tensorflow-yolov3/blob/add5920130cd8fd9474da6e4d8dd33b24a56524f/core/dataset.py#L109)
 ```python
 max_bbox = np.concatenate([np.min(bboxes[:, 0:2], axis=0), np.max(bboxes[:, 2:4], axis=0)], axis=-1)
 ```
@@ -60,23 +65,63 @@ max_bbox = np.concatenate([np.min(bboxes[:, 0:2], axis=0), np.max(bboxes[:, 2:4]
 - [ ] Question here
 * `np.concatenate([min_coord, max_coord], axis=-1)`, concatenates the last dim???
 
-![](.images/original_with_bbox.png)
-![](.images/flipped_img_with_bbox.png)
-* Random Flipped Image
+```python
+image = image[crop_ymin : crop_ymax, crop_xmin : crop_xmax]     # row/col, i.e. y/x
+```
+* the first dimension is height, i.e. y or rows
+* the second dimension is width, i.e. x or columns
 
 ![](.images/original_cropped.png) 
 ![](.images/flipped_cropped.png)
 * Randrom Cropped Image
 
-### cv2 coordinates
-![OpenCV Point(x,y) represent (column,row) or (row,column)](https://stackoverflow.com/questions/25642532/opencv-pointx-y-represent-column-row-or-row-column)
+#### [random_translate()](https://github.com/YunYang1994/tensorflow-yolov3/blob/add5920130cd8fd9474da6e4d8dd33b24a56524f/core/dataset.py#L132)
+```python
+tx = random.uniform(-(max_l_trans - 1), (max_r_trans - 1))
+ty = random.uniform(-(max_u_trans - 1), (max_d_trans - 1))
+
+M = np.array([[1, 0, tx], [0, 1, ty]])
+image = cv2.warpAffine(image, M, (w, h))
+```
+* 将 image 上下左右随机移动，可以移动的范围是 `[tx, ty]`
+* Why `(max_l_trans-1)`? 为什么要有 `-1`.
+
+![](.images/original_translate.png)
+![](.images/flipped_translate.png)        
+* Random translate
+
+### cv2
+#### cv2 coordinates
+[OpenCV Point(x,y) represent (column,row) or (row,column)](https://stackoverflow.com/questions/25642532/opencv-pointx-y-represent-column-row-or-row-column)
 
 `image = image[:, ::-1, :]`
+
 ![](.images/flip_image.png)
 
-### cv2, image display
+#### cv2, image display
 * [CV01-OpenCV窗口手动关闭后堵塞程序运行的问题](https://jameslei.com/cv01-opencv-cjxbqdb52000b9ys1kjj31yn0)
 
+#### [CV2: Geometric Transformations of Images](https://opencv-python-tutroals.readthedocs.io/en/latest/py_tutorials/py_imgproc/py_geometric_transformations/py_geometric_transformations.html)
+* `cv2.warpAffine` and `cv2.warpPerspective`
+* **Scaling** Scaling is just resizing of the image. OpecCV comes with a function `cv2.resize()` for this purpose.
+    * Scaling factor
+    * Interpolation methods: `cv2.INTER_AREA` for shrinking, `cv2.INTER_CUBIC` and `cv2.INTER_LINEAR` for zooming.
+* **Translation** Translation is the shifting of object's location. Let the shift in (x, y) direction be (tx, ty),
+you can create the transformation matrix **M**.
+    * `cv2.warpAfine()` 
+* **Rotation** Transformation matrix. OpenCV provides scaled rotation with adjustable center of rotation so that
+you can rotate at any location you perfer.
+    * `cv2.getRorationMatrix2D`
+* **Affine Transformation** In affine transformation, all parallel lines in the original image will still be
+parallel in the output image.
+    * `cv2.getAffineTransform`
+    * `cv2.warpAffine`
+* **Perspective Transformation**
+    * `cv2.getPerspectiveTransform`
+    * `cv2.warpPerspective`
+* **Additional Resources:** [“Computer Vision: Algorithms and Applications”, Richard Szeliski]()
 
+
+---
 ## GitHub Setup
 ![](.images/GitHub_Quick_Setup.png)
