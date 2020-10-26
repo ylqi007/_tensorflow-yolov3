@@ -56,8 +56,8 @@ def image_preprocess(image, target_size, gt_bboxes=None):
 
     ih, iw = target_size
     h, w, _ = image.shape
-    scale = min(iw / w, ih / h) # 500 / 200 = 2.5, 500/300 = 1.67
-    nw, nh = int(scale * w), int(scale * h) # new width and new height
+    scale = min(iw / w, ih / h)     # 500 / 200 = 2.5, 500/300 = 1.67
+    nw, nh = int(scale * w), int(scale * h)     # new width and new height
     image_resized = cv2.resize(image, (nw, nh)) # Zoom and shrink the image by minimum scale
 
     image_paded = np.full(shape=[ih, iw, 3], fill_value=128.0)

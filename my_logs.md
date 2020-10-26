@@ -14,7 +14,7 @@ _tensorflow-yolov3/
 - [x] Parse annot and draw bounding boxes on original image.
     - [x] Cannot draw bounding boxes on flipped image. Why?
     - [x] [Python OpenCV drawing errors after manipulating array with numpy](https://stackoverflow.com/questions/30249053/python-opencv-drawing-errors-after-manipulating-array-with-numpy)
-- [ ]
+- [ ] `dataset.py/preprocess_true_boxes()`
 
 
 ## dataset.py
@@ -95,6 +95,52 @@ image = cv2.warpAffine(image, M, (w, h))
 ![](.images/flipped_utils.png)
 * `cv2.imread()` 返回的是 BGR format 的 ndarray，如果用`cv2` 显示的时候，显示正常，没有问题。此时用 `plt.show()` 则会显示不正常。
 * `image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32)`, 此时经过 format，image 是 RGB format 的image，则此时用 `cv2.imshow()` 会不正常，而 `plt.show()` 正常。
+
+#### [preprocess_true_boxes](https://github.com/YunYang1994/tensorflow-yolov3/blob/add5920130cd8fd9474da6e4d8dd33b24a56524f/core/dataset.py#L193)
+* If the `self.train_input_size = 512`, and `self.strides = np.array([8, 16, 32])`, 
+then the `self.train_output_sizes = [64, 32, 16]`, i.e. the original input size (512)
+will be divided into `64 x 64` cells.
+* `self.anchor_per_scale = 3` means that at each cell there has 3 anchors with different sizes.
+* Then the `64 x 64` layer will have `64 x 64 x 3` anchors,
+the `32 x 32` layer will have `32 x 32 x 3` anchors,
+the `16 x 16` layer will have `16 x 16 x 3` anchors,
+all of these three layers have anchors much more than 150.
+But only `self.max_bbox_per_scale` in each layer.
+
+##### A bbox sample
+```
+bbox = [349, 128, 515, 466]         # [xmin, ymin, xmax, ymax], why 515 > 512?
+bbox_xywh = [432, 297, 166, 338]    # [x_center, y_center, width, height]
+strides = [[8], [16], [32]]
+bbox_scaled = [[54.      37.125   20.75    42.25   ]
+                [27.      18.5625  10.375   21.125  ]
+                [13.5      9.28125  5.1875  10.5625 ]]
+anchors_xywh = [[54.5   37.5    1.25   1.625]       # top left corner is (54, 37) in 64x64
+                 [27.5   18.5    2.     3.75 ]      # top left corner is (27, 18) in 32x32
+                 [13.5    9.5    4.125  2.875]]     # top left corner is (13, 9) in 16x16
+                [[54.5    37.5     1.875   3.8125]
+                 [27.5    18.5     3.875   2.8125]
+                 [13.5     9.5     3.6875  7.4375]]
+                [[54.5     37.5      3.625    2.8125 ]
+                 [27.5     18.5      4.875    6.1875 ]
+                 [13.5      9.5     11.65625 10.1875 ]]
+```
+
+```python
+label = [np.zeros((self.train_output_sizes[i], self.train_output_sizes[i], self.anchor_per_scale, 5 + self.num_classes)) for i in range(3)]
+bboxes_xywh = [np.zeros((self.max_bbox_per_scale, 4)) for _ in range(3)]
+bbox_count = np.zeros((3,))
+```
+* Supporse input_size = 512, stides = [8, 16, 32] ==> output_size = [64, 32, 16]
+* `label`: [Shape(64, 64, 3, 25), Shape(32, 32, 3, 25), Shape(16, 16, 3, 25)]
+    * `64x64`, i.e. 将 512x512 的 image 缩小8倍得到的大小，也就是 64x64 的 cells；
+    * `3`，是指每个 cell 位置上有 3 个 anchor，没别对应不同的大小和长宽比例；
+    * `25`，[:4] 对应这个 object truth box 的 position `(xc, yc, w, h)`, [4] 对应是否有 object，[5:] 对应每个 class 的 initial possibility。
+    * 在 `3` 个 anchors 中，只有与 bbox 的 IoU 大于 0.3 的时候，才考虑下个维度的数，也就是 `[25]` 这个维度。 
+* `bboxes_xywh`: [Shape(3, 4), Shape(3, 4), Shape(3, 4)]
+* `bbox_count`: np.zeros((3,)), 统计每个 scale 上 bbox？
+
+* `if np.any(iou_mask):`    说明 `bbox_xywh_scaled[i]` 与当前的 `anchor` 有交叠。
 
 
 ### cv2

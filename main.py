@@ -55,6 +55,15 @@ def show_image(img_name, img, bboxes=None):
     cv2.destroyAllWindows()
 
 
+def _test_preprocess_true_boxes():
+    dataset = Dataset('train')
+    # anno = '/home/ylqi007/work/DATA/VOC2007/test/JPEGImages/004538.jpg 215,35,308,224,14 41,77,403,367,12'
+    anno = '/home/ylqi007/work/DATA/VOC2007/test/JPEGImages/004538.jpg 215,35,308,224,14'
+    image, bboxes = dataset.parse_annotation(annotation=anno)
+    print("bboxes after dataset.parse_annotation()\n", bboxes)
+    dataset.preprocess_true_boxes(bboxes)
+
+
 def print_hi(name):
     # Use a breakpoint in the code line below to debug your script.
     print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
@@ -73,6 +82,8 @@ if __name__ == '__main__':
     # cv2_img_read_test()
 
     # Dataset test
-    annotation_flip_test()
+    # annotation_flip_test()
 
+    # Dataset.preprocess_true_boxes() test
+    _test_preprocess_true_boxes()
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
