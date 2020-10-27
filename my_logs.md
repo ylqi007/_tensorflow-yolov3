@@ -176,5 +176,148 @@ parallel in the output image.
 
 
 ---
+
+---
+## [core/common.py]()
+### How to calculate paddings?
+There are various layers in CNN network:
+* **Input Layer:** All the input layer does is ready the image. So, there are not parameters 
+to learn in here.
+* **Convolutional Layer:** Consider a convolutional layer which takes "l" feature maps as the input 
+and has "k" feature maps as output. The filter size is "n*m".
+* **Fully-connected Layer:** In this layer, all input units have a separable weight to each output 
+unit. For `n` inputs and `m` outputs, the number of weights is `n * m`. Additionally, this layer 
+has the bias for each output node, so `(n + 1) * m` parameters.
+* **Output Layer:** This layer is the fully connected layer, so "(n+1)m" parameters, when "n" is 
+the number of inputs and "m" is the number of outputs.
+
+### [common.py/convolutional()](https://github.com/YunYang1994/tensorflow-yolov3/blob/add5920130cd8fd9474da6e4d8dd33b24a56524f/core/common.py#L17)
+* `paddings = tf.constant([[0, 0], [pad_h, pad_h], [pad_w, pad_w], [0, 0]])`
+    Regarding the correspondence between tensor and paddings, first their rank needs to be constant.
+    Suppose the shape of tensors in `[B, H, W, C]`, which is the batch, height, width, channel.
+    Generally speaking, there is no need for pads for dimensions B and C. You only need to operate 
+    on H and W dimensions, so the shape of the corresponding paddings is `[[0, 0], [H_top
+    , H_bottom], [W_left, W_right], [0, 0]]`.
+    The H dimension can be understood as the row dimension, and the W dimension is the column 
+    dimension.
+    
+#### TODO
+* tf.constant()
+* tf.pad()
+* tf.get_variable()
+* tf.nn.conv2d()
+* tf.layers.batch_normalization()
+* tf.nn.bias_add()
+* tf.nn.leaky_relu()
+* [common.py/residual_block()]()
+
+
+References:
+* [6.3. Padding and Stride](https://d2l.ai/chapter_convolutional-neural-networks/padding-and-strides.html)
+* [What is the difference between 'SAME' and 'VALID' padding in tf.nn.max_pool of tensorflow?](https://stackoverflow.com/questions/37674306/what-is-the-difference-between-same-and-valid-padding-in-tf-nn-max-pool-of-t)
+* [A guide to convolution arithmetic for deep learning](https://arxiv.org/pdf/1603.07285v1.pdf)
+* [tf.pad(tensor, paddings, mode='CONSTANT')](https://www.programmersought.com/article/85861218450/)
+### 
+
+
+
+
+
+
+
+---
+## Convolution
+We can compute the spatial size of the output volume as a function of:  
+
+    * the input volume size (`W`)
+    * the receptive field size of the Conv Layer (`F`)
+    * the stride with which they are applied (`S`)
+    * the amount of zero padding used on the border (`P`).          
+
+`outputSize = (W - F + 2P) / S + 1`
+
+**Use of zero-padding:** In general, setting zero padding to be `P = (F - 1) / 2` when the stride
+is `S = 1` ensures that the input volume and output volume will have the same size spatially.
+也就是当 `S = 1` 的时候，并且 `P = (F - 1) / 2`，则 outputSize 与 inputSize 相同。
+It is very common to use zero-padding in this way.
+
+**Constraints on strides:** Note again that the spatial arrangement hyperparameters have mutual 
+constraints. If `outputSize = (W - F + 2P) / S + 1 = (10 - 3 + 2 * 0) / 2 + 1 = 4.5`, this setting 
+of the hyperparameters is considered to be invalid, and a ConvNet library could throw an exception 
+or zero pad the rest to make it fit, or crop the input to make it fit, or something.
+
+**Summary** To summarize the Conv Layer:            
+* Accepts a volume of size `W1 x H1 x D1`, i.e. the input size
+* Required four hyperparameters:
+    * number of filters `K`,
+    * their spatial extent `F`,
+    * the stride `S`,
+    * the amount of zero padding `P`.
+* Produces a volume of size `W2 x H2 x D2` where:
+    * `W2 = (W1 - F + 2P) / S + 1`
+    * `H2 = (H1 - F + 2P) / S + 1` (i.e. width and height are computed equally by symmetry)
+    * `D2 = K` (i.e. the number of filers)
+* With parameter sharing, it introduces `F x F x D1` weights per filter, for a total of `F x F x 
+D1) x K` weights and `K` biases.
+* In the output volume, the `d-th` depth slice (of size `W2 x H2`) is the result of performing a 
+valid convolution of the `d-th` filter over the input volume with a stride of `S`, and then offset 
+by `d-th` bias.
+* A common setting of the hyperparameters is `F=3, S=1, P=1`.
+
+* The height or width of the output image, calculated from these equations, might be a non-integer 
+value. In that case, you might want to handle the situation in any way to satisfy the desired 
+output dimension. The spatial semantics of the convolution ops depend on the padding scheme chosen: 
+`SAME` or `VALID`. Note that the padding values are always zero.
+* Let's assume that the 4D input has shape `[batch_size, input_height, input_width, input_depth]`, 
+and the 4D filter has shape `[filter_height, filter_width, filter_depth, number_of_filters]`. Here, 
+the number of channels (depth) in input image must be the same with depth of the filter, meaning 
+`input_depth = filter_depth`.
+* First, let's consider `SAME` padding scheme. The output height and width are computed as:
+`H2 = ceiling(H1 / Sh), W2 = ceiling(W2 / Sw)`. Here is how TensorFlow calculates the required 
+total padding, applied along the height and width:
+    ```
+    if H1 % Sh == 0:
+        Ph = max(Fh - Sh, 0)    # Padding along height
+    else:
+        Ph = max(Fh - (H1 % Sh), 0)
+  
+    if W1 % Sw == 0:
+        Pw = max(Fw - Sw, 0)    # Padding along width
+    else:
+        Pw = max(Fw - (W1 % Sw), 0)
+  
+    # Finally, the padding on the top/bottom and left/right are:
+    Pt = flooring(Ph / 2),  Pb = Ph - Pt
+    Pl = flooring(Pw / 2),  Pr = Pw - Pl
+    ```
+* For example, when `padding along height` is 5, we pad 2 pixels at the top and 3 pixels at the
+bottom.
+* In the `VALID` padding scheme which we do not add any zero padding to the input, the size of the 
+output would be:
+    * `H2 = ceiling((H1 - Fh + 1) / Sh)`
+    * `W2 = ceiling((W2 - Fw + 1) / Sw)`
+* Image size = `img_height x img_width x img_depth`. A grayscale image has 1 channel (such as 
+infamous MNIST dataset), a color image has 3 channles (such as RGB image).
+
+References:
+* [Convolutional Neural Networks (CNNs / ConvNets)](https://cs231n.github.io/convolutional-networks/)
+* [Autoencoder: Downsampling and Upsampling](https://kharshit.github.io/blog/2019/02/15/autoencoder-downsampling-and-upsampling)
+* [Helper - numpy.pad upsample/downsample](https://www.kaggle.com/yuooka/helper-numpy-pad-upsample-downsample)
+* [A Gentle Introduction to Padding and Stride for Convolutional Neural Networks](https://machinelearningmastery.com/padding-and-stride-for-convolutional-neural-networks/)
+* [下采样卷积手动padding部分如何推导 #437](https://github.com/YunYang1994/tensorflow-yolov3/issues/437)
+* [卷积运算中，在stride>1时，关于conv2d的padding的问题。 #355](https://github.com/YunYang1994/tensorflow-yolov3/issues/355)
+* [What does the "same" padding parameter in convolution mean in TensorFlow?](https://www.quora.com/What-does-the-same-padding-parameter-in-convolution-mean-in-TensorFlow)
+* [Implementing 'SAME' and 'VALID' padding of Tensorflow in Python](https://mmuratarat.github.io/2019-01-17/implementing-padding-schemes-of-tensorflow-in-python)
+
+
+---
+## YOLOv3 Arch
+![](.images/yolo-arch.jpg)
+
+
+
+
+
+---
 ## GitHub Setup
 ![](.images/GitHub_Quick_Setup.png)

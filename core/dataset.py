@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # @Time    : 10/21/20 12:54 PM
-# @Author  : Shark
+# @Author  : ylqi007
 # @Site    : 
 # @File    : dataset.py
 # @Software: PyCharm
@@ -24,7 +24,7 @@ class Dataset(object):
     def __init__(self, dataset_type):
         """
         Initialize a dataset for training or testing.
-        :param dataset_type:
+        :param dataset_type: train or test
         """
         # TODO, Initialize the dataset class
         self.annot_path     = cfg.TRAIN.ANNOT_PATH if dataset_type == 'train' else cfg.TEST.ANNOT_PATH
@@ -32,12 +32,12 @@ class Dataset(object):
         self.batch_size     = cfg.TRAIN.BATCH_SIZE if dataset_type == 'train' else cfg.TEST.BATCH_SIZE
         self.data_aug       = cfg.TRAIN.DATA_AUG   if dataset_type == 'train' else cfg.TEST.DATA_AUG
 
-        self.train_input_sizes  = cfg.TRAIN.INPUT_SIZE
-        self.strides            = np.array(cfg.YOLO.STRIDES)
-        self.classes            = utils.read_class_names(cfg.YOLO.CLASSES)
-        self.num_classes        = len(self.classes)
-        self.anchors            = np.array(utils.get_anchors(cfg.YOLO.ANCHORS))
-        self.anchor_per_scale   = cfg.YOLO.ANCHOR_PER_SCALE
+        self.train_input_sizes = cfg.TRAIN.INPUT_SIZE
+        self.strides = np.array(cfg.YOLO.STRIDES)
+        self.classes = utils.read_class_names(cfg.YOLO.CLASSES)
+        self.num_classes = len(self.classes)
+        self.anchors = np.array(utils.get_anchors(cfg.YOLO.ANCHORS))
+        self.anchor_per_scale = cfg.YOLO.ANCHOR_PER_SCALE
         self.max_bbox_per_scale = 150
 
         self.annotations = self.load_annotations(dataset_type)
@@ -77,6 +77,20 @@ class Dataset(object):
                     image, bboxes = self.parse_annotation(annotation)
                     label_sbbox, label_mbbox, label_lbbox, sbboxes, mbboxes, lbboxes = self.preprocess_true_boxes(bboxes)
 
+                    batch_image[num, :, :, :] = image
+                    batch_label_sbbox[num, :, :, :] = label_sbbox
+                    batch_label_mbbox[num, :, :, :] = label_mbbox
+                    batch_label_lbbox[num, :, :, :] = label_lbbox
+                    batch_sbboxes[num:, :, :] = sbboxes
+                    batch_mbboxes[num:, :, :] = mbboxes
+                    batch_lbboxes[num:, :, :] = lbboxes
+                    num += 1
+                self.batch_count += 1
+                return batch_image, batch_label_sbbox, batch_label_mbbox, batch_label_lbbox, batch_sbboxes, batch_mbboxes, batch_lbboxes
+            else:
+                self.batch_count = 0
+                np.random.shuffle(self.annotations)
+                raise StopIteration
 
     def __len__(self):
         return self.num_batches
@@ -149,12 +163,11 @@ class Dataset(object):
             image, bboxes = self.random_crop(np.copy(image), np.copy(bboxes))
             image, bboxes = self.random_translate(np.copy(image), np.copy(bboxes))
         # line 151 is the final code, 152 for test
-        # image, bboxes = utils.image_preprocess(np.copy(image), [self.train_input_size, self.train_input_size], np.copy(bboxes))
-        image, bboxes = utils.image_preprocess(np.copy(image), [self.train_input_sizes[-1], self.train_input_sizes[-1]], np.copy(bboxes))   # for test
+        image, bboxes = utils.image_preprocess(np.copy(image), [self.train_input_size, self.train_input_size], np.copy(bboxes))
+        # image, bboxes = utils.image_preprocess(np.copy(image), [self.train_input_sizes[-1], self.train_input_sizes[-1]], np.copy(bboxes))   # for test
         return image, bboxes
 
     def bbox_iou(self, boxes1, boxes2):
-        # TODO
         boxes1 = np.array(boxes1)
         boxes2 = np.array(boxes2)
         # print("boxes1:\n", boxes1)
@@ -181,7 +194,7 @@ class Dataset(object):
         inter_section = np.maximum(right_down - left_up, 0.0)
         inter_area = inter_section[..., 0] * inter_section[..., 1]
         union_area = boxes1_area + boxes2_area - inter_area
-        print("IOU:\n", inter_area / union_area)
+        # print("IOU:\n", inter_area / union_area)
         return inter_area / union_area
 
     def preprocess_true_boxes(self, bboxes):
@@ -245,7 +258,7 @@ class Dataset(object):
                 # print(best_anchor_ind)
                 best_detect = int(best_anchor_ind / self.anchor_per_scale)  # best_detect = 0, i.e. bbox_xywh[0]
                 best_anchor = int(best_anchor_ind % self.anchor_per_scale)
-                xind, yind = np.floor(bbox_xywh_scaled[best_detect, 0:2]).astype(np.int32)  # xcenter,ycenter in scaled images
+                xind, yind = np.floor(bbox_xywh_scaled[best_detect, 0:2]).astype(np.int32)  # xcenter,ycenter in scaled .images
 
                 label[best_detect][yind, xind, best_anchor, :] = 0
                 label[best_detect][yind, xind, best_anchor, 0:4] = bbox_xywh    # bbox_xywh,
