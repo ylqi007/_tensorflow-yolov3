@@ -15,6 +15,18 @@ _tensorflow-yolov3/
     - [x] Cannot draw bounding boxes on flipped image. Why?
     - [x] [Python OpenCV drawing errors after manipulating array with numpy](https://stackoverflow.com/questions/30249053/python-opencv-drawing-errors-after-manipulating-array-with-numpy)
 - [ ] `dataset.py/preprocess_true_boxes()`
+- [ ] focal loss
+- [ ] NMS 处理
+- [ ] anchor 响应机制
+    - [ ] K-means 聚类
+    - [ ] 正负样本分配
+- [ ] 损失函数 
+    - [ ] 置信度损失
+    - [ ] 分类损失
+    - [ ] 框回归损失
+    - [ ] GIoU
+- [ ] 加载与训练模型
+    
 
 
 ## dataset.py
@@ -139,8 +151,18 @@ bbox_count = np.zeros((3,))
     * 在 `3` 个 anchors 中，只有与 bbox 的 IoU 大于 0.3 的时候，才考虑下个维度的数，也就是 `[25]` 这个维度。 
 * `bboxes_xywh`: [Shape(3, 4), Shape(3, 4), Shape(3, 4)]
 * `bbox_count`: np.zeros((3,)), 统计每个 scale 上 bbox？
-
 * `if np.any(iou_mask):`    说明 `bbox_xywh_scaled[i]` 与当前的 `anchor` 有交叠。
+
+### `__next__(self)`
+
+* `return batch_image, batch_label_sbbox, batch_label_mbbox, batch_label_lbbox, batch_sbboxes, batch_mbboxes, batch_lbboxes`
+* `batch_image` : [batch, InputSize, InputSize, 3], inputSize=[320, 352, ..., 618]
+* `batch_label_sbbox` : [batch, train_output_size[0], train_output_size[0], anchor_per_scale, 5+num_classes], train_output_size[0] = inputSize / 8, anchor_per_scale=3
+* `batch_label_mbbox` : [batch, train_output_size[1], tran_output_size[1], anchor_per_scale, 5+num_classes], train_output_size[1] = inputSize / 16, anchor_per_scale=3
+* `batch_label_lbbox` : [batch, train_output_size[2], tran_output_size[2], anchor_per_scale, 5+num_classes], train_output_size[2] = inputSize / 32, anchor_per_scale=3  
+* `batch_sbboxes` : [batch, max_bbox_scale, 4]  = [batch, 150, 4]
+* `batch_mbboxes` : [batch, max_bbox_scale, 4]  = [batch, 150, 4]
+* `batch_lbboxes` : [batch, max_bbox_scale, 4]  = [batch, 150, 4]
 
 
 ### cv2
@@ -178,6 +200,10 @@ parallel in the output image.
 ---
 
 ---
+
+### [focal_loss](https://github.com/YunYang1994/tensorflow-yolov3/blob/add5920130cd8fd9474da6e4d8dd33b24a56524f/core/yolov3.py#L131)
+
+
 ## [core/common.py]()
 ### How to calculate paddings?
 There are various layers in CNN network:
@@ -314,10 +340,95 @@ References:
 ## YOLOv3 Arch
 ![](.images/yolo-arch.jpg)
 
+![](.images/yolo-arch1.jpg)
+
+### [common.py/convolutional()](https://github.com/YunYang1994/tensorflow-yolov3/blob/add5920130cd8fd9474da6e4d8dd33b24a56524f/core/common.py#L17)
+```python
+def convolutional(input_data, filters_shape, trainable, name, downsample=False, activate=True, bn=True):
+
+    with tf.variable_scope(name):
+        if downsample:
+            pad_h, pad_w = (filters_shape[0] - 2) // 2 + 1, (filters_shape[1] - 2) // 2 + 1
+            paddings = tf.constant([[0, 0], [pad_h, pad_h], [pad_w, pad_w], [0, 0]])
+            input_data = tf.pad(input_data, paddings, 'CONSTANT')
+            strides = (1, 2, 2, 1)
+            padding = 'VALID'
+        else:
+            strides = (1, 1, 1, 1)
+            padding = "SAME"
+
+        weight = tf.get_variable(name='weight', dtype=tf.float32, trainable=True,
+                                 shape=filters_shape, initializer=tf.random_normal_initializer(stddev=0.01))
+        conv = tf.nn.conv2d(input=input_data, filter=weight, strides=strides, padding=padding)
+
+        if bn:
+            conv = tf.layers.batch_normalization(conv, beta_initializer=tf.zeros_initializer(),
+                                                 gamma_initializer=tf.ones_initializer(),
+                                                 moving_mean_initializer=tf.zeros_initializer(),
+                                                 moving_variance_initializer=tf.ones_initializer(), training=trainable)
+        else:
+            bias = tf.get_variable(name='bias', shape=filters_shape[-1], trainable=True,
+                                   dtype=tf.float32, initializer=tf.constant_initializer(0.0))
+            conv = tf.nn.bias_add(conv, bias)
+
+        if activate == True: conv = tf.nn.leaky_relu(conv, alpha=0.1)
+
+    return conv
+```
+* Downsample or Not
+    * `conv = tf.nn.conv2d(input=input_data, filter=weight, strides=strides, padding=padding)`
+    * `downsample == False`, i.e. `strides=(1, 1, 1, 1)` and `padding="SAME"`, then the output 
+    of Conv2D should have the same size with the input in height and width.
+    * `downsample == True`, i.e. `strides=(1, 2, 2, 1)` and `padidng="VALID"`, then the output
+    of Conv@D should be half of the input size in height and width.
+    * 需要 downsample 的时候，在 width/height 方向上，`stride=2`,此时 `output_HW = intput_HW/2`;
+    不需要 downsample 的时候，在 width/height 方向上，`stride=1`.
+* `SAME` vs `VALID`
+    * In `SAME` padding scheme, the output have the same height and width with the input.
+    * In `VALID` padding scheme, we do not add any zero padding to the input, i.e. `P = 0`.
+    * 在需要 downsample 的时候，采用 `VALID` padding，则调用卷积函数的时候，不会自动进行 zero padding，
+    所以需要手动 padding。
+* **Downsample**
+    * 在 conv 过程中，总共 5 次 downsample，也就是 inputSize 至少是 32 的倍数,
+    therefore, `__C.TRAIN.INPUT_SIZE = [320, 352, 384, 416, 448, 480, 512, 544, 576, 608]`.
+    * 此时需要 outputSize 是 inputSize 的一半, `(W - F + 2P)/2 + 1 = (W - 3 + 2)/2 + 1 = W / 2`,
+    此时 W 是偶数，`(W - 1) / 2` 比 `W/2` 小 1,则 `（W-1)/2 + 1` 恰好为 `W/2`.
+* `weight = tf.get_variable(name='weight', dtype=tf.float32, trainable=True,
+                            shape=filters_shape, initializer=tf.random_normal_initializer(stddev=0.01))`
+    * `shape = filters_shape`, i.e. `[filter_height, filter_width, filter_depth, num_of_filters]`,
+    此时 filter_shape 是在创建 Conv Layer 的时候确定的。
+    * `initializer=tf.random_normal_initializer(stddev=0.01)`, 初始化 weight 的众多方法。
+* `input_data = tf.pad(input_data, paddings, 'CONSTANT')`
+    * [tf.pad](https://www.tensorflow.org/api_docs/python/tf/pad)
+    * `"CONSTANT"`
+* `tf.layers.batch_normalization()`
 
 
+### [def decode()](https://github.com/YunYang1994/tensorflow-yolov3/blob/add5920130cd8fd9474da6e4d8dd33b24a56524f/core/yolov3.py#L97)
 
+文章原文如下：
 
----
-## GitHub Setup
-![](.images/GitHub_Quick_Setup.png)
+![image](https://user-images.githubusercontent.com/23485976/97388566-5b47c500-18a6-11eb-9438-52b70408d8a2.png)
+![image](https://user-images.githubusercontent.com/23485976/97388610-731f4900-18a6-11eb-9ff1-2a85c2e5b2e6.png)
+
+* The network predicts 4 coordinates for **each bounding box**, tx, ty, tw, th.
+* The cell is offset from the top left corner of the image by (cx, cy) and the bounding box prior has width and height pw, ph, then the predictions corresponds to: bx, by, bw, bh
+* YOLOv3 predicts an objectness score for **each bounding box** using logistic regression. This should be 1 if the bounding box prior overlaps a **ground truth object** by more than any other bounding box prior. If the bounding box prior is not the best but does overlap a ground truth object by more than some threshold we ignore the prediction. 多个满足条件的 bounding box prior，只选最好的。Our system only assigns one bounding box prior for each ground truth object. If a bounding box prior is not assigned to a ground truth object it incurs no loss for coordinate or class predictions, only objectness. 
+
+名词解释：
+1. **anchor box (bounding box prior)** anchor box 最初是由 Faster RCNN 引入的。anchor box (论文中也
+称为 bounding box prior，后面均使用 anchor box) 其实是从训练集的所有 ground truth box 中的统计出来的几个
+比较具有代表性的 boxes。在训练的时候，可以先将这些先验经验加入到模型中，这样模型在学习的时候就减小了随机瞎找
+的概率，当然就有助于模型收敛。
+
+## GIOU
+- [ ] TODO
+
+## References:
+* [YOLOv3 算法的一点理解](https://yunyang1994.github.io/2018/12/28/YOLOv3/)
+* [目标检测3: yolov3结构原理，boundingbox边框回归](https://blog.csdn.net/u010397980/article/details/85058630)
+* [揭秘YOLOv3鲜为人知的关键细节](https://zhuanlan.zhihu.com/p/50595699)
+* [超详细的Yolov3边框预测分析](https://zhuanlan.zhihu.com/p/49995236)
+* [关于YOLOv3的一些细节](https://www.jianshu.com/p/86b8208f634f)
+* [Why does Faster R-CNN use anchor boxes?](https://www.quora.com/Why-does-Faster-R-CNN-use-anchor-boxes)
+* [bbox_loss_scale的作用 #459](https://github.com/YunYang1994/tensorflow-yolov3/issues/459)
